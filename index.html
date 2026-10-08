@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>資料來源格式測試與檢視器 (JSON / CSV / XML)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* 自訂滾動條 */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans antialiased">
+
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-100">
+          <i class="fa-solid fa-network-wired text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Data Endpoint Tester</h1>
+          <p class="text-xs text-slate-500">網址資料探測器・支援 JSON / CSV / XML 解析</p>
+        </div>
+      </div>
+      <div class="hidden sm:flex items-center gap-2">
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+          <i class="fa-solid fa-circle text-[8px] mr-1.5 text-emerald-500 animate-pulse"></i> Ready
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex-grow w-full">
+    <!-- 控制卡片 -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 mb-6">
+      <form id="urlForm" class="space-y-4" onsubmit="event.preventDefault(); fetchData();">
+        <div>
+          <label for="apiUrl" class="block text-sm font-semibold text-slate-700 mb-1">
+            目標資源網址 (URL)
+          </label>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <div class="relative flex-grow">
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <i class="fa-solid fa-link"></i>
+              </div>
+              <input 
+                type="url" 
+                id="apiUrl" 
+                name="apiUrl"
+                required
+                placeholder="https://example.com/data.json" 
+                class="w-full pl-10 pr-4 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 rounded-xl text-sm transition-all duration-150 outline-none text-slate-800 placeholder-slate-400"
+              />
+            </div>
+            <button 
+              type="submit" 
+              id="submitBtn"
+              class="inline-flex items-center justify-center px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium rounded-xl shadow-sm shadow-indigo-200 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 whitespace-nowrap"
+            >
+              <i class="fa-solid fa-bolt mr-2"></i>測試並取得
+            </button>
+            <button 
+              type="button" 
+              id="resetBtn"
+              onclick="resetForm()"
+              class="inline-flex items-center justify-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 text-sm font-medium rounded-xl border border-slate-300 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-slate-300 whitespace-nowrap"
+            >
+              <i class="fa-solid fa-rotate-left mr-1.5"></i>重置
+            </button>
+          </div>
+        </div>
+
+        <!-- 輔助設定與快選範例 -->
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs">
+          <!-- 快捷測試範例按鈕 -->
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="text-slate-500 font-medium mr-1">快捷範例：</span>
+            <button type="button" onclick="loadSample('json')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg transition-colors">
+              JSON 範例
+            </button>
+            <button type="button" onclick="loadSample('csv')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-colors">
+              CSV 範例
+            </button>
+            <button type="button" onclick="loadSample('xml')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-lg transition-colors">
+              XML 範例
+            </button>
+          </div>
+
+          <!-- CORS 代理選項 (解決大部分公用網址跨域問題) -->
+          <div class="flex items-center gap-2">
+            <label class="inline-flex items-center cursor-pointer select-none">
+              <input type="checkbox" id="useProxy" checked class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 mr-1.5">
+              <span class="text-slate-600">啟用 CORS 跨域代理 (推薦)</span>
+            </label>
+            <div class="group relative cursor-pointer text-slate-400 hover:text-slate-600">
+              <i class="fa-regular fa-circle-question"></i>
+              <div class="hidden group-hover:block absolute right-0 bottom-full mb-1 w-64 p-2 bg-slate-800 text-white text-[11px] rounded-lg shadow-lg z-20 leading-relaxed">
+                瀏覽器基於安全性限制無法直接讀取未設置 CORS 標頭的外部網址，開啟代理可由公開中繼代理取得內容。
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- 載入中狀態 -->
+    <div id="loadingState" class="hidden py-16 flex-col items-center justify-center text-center">
+      <div class="relative w-12 h-12 mb-3">
+        <div class="w-12 h-12 rounded-full border-4 border-slate-200 border-t-indigo-600 animate-spin"></div>
+      </div>
+      <p class="text-sm font-medium text-slate-600">正在請求網址並分析資料格式...</p>
+      <p class="text-xs text-slate-400 mt-1">分析 JSON、CSV、XML 結構中</p>
+    </div>
+
+    <!-- 錯誤訊息提示卡片 (無法取得) -->
+    <div id="errorBox" class="hidden mb-6 bg-red-50 border border-red-200 rounded-2xl p-5 text-red-900 shadow-sm animate-fade-in">
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-xl bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+        </div>
+        <div class="flex-grow">
+          <h3 class="text-base font-bold text-red-800">無法取得資料</h3>
+          <p id="errorMessage" class="text-sm text-red-700 mt-1 leading-relaxed">
+            無法自目標網址取得有效資料。
+          </p>
+          <div id="errorDetails" class="mt-3 text-xs font-mono bg-red-100/60 p-2.5 rounded-lg border border-red-200 text-red-800 break-all hidden"></div>
+          <div class="mt-3 flex items-center gap-2">
+            <button onclick="retryWithProxyToggle()" class="text-xs font-medium bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg transition-colors">
+              切換 CORS 代理後重試
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 成功結果顯示區塊 -->
+    <div id="resultContainer" class="hidden space-y-6">
+      <!-- 狀態欄資訊 (格式、回應狀態、耗時等) -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <span id="formatBadge" class="px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase bg-emerald-100 text-emerald-800">
+            UNKNOWN
+          </span>
+          <div>
+            <div class="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+              <span>成功取得資料</span>
+              <i class="fa-solid fa-circle-check text-emerald-500 text-xs"></i>
+            </div>
+            <p id="totalRecordsText" class="text-xs text-slate-500">已提取前 5 筆資料</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 sm:gap-6 text-xs text-slate-500">
+          <div>
+            <span class="block text-[11px] text-slate-400">HTTP 狀態</span>
+            <span id="httpStatus" class="font-semibold text-slate-700">200 OK</span>
+          </div>
+          <div>
+            <span class="block text-[11px] text-slate-400">回應耗時</span>
+            <span id="responseTime" class="font-semibold text-slate-700">-- ms</span>
+          </div>
+          <div>
+            <span class="block text-[11px] text-slate-400">資料大小</span>
+            <span id="responseSize" class="font-semibold text-slate-700">-- KB</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 前 5 筆預覽卡片 -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+            <h2 class="text-sm font-bold text-slate-800">前 5 筆資料展示 (Preview 5 Records)</h2>
+          </div>
+          <!-- 檢視模式切換：表格 vs JSON 格式樹 -->
+          <div class="inline-flex p-1 bg-slate-200/70 rounded-xl text-xs font-medium">
+            <button id="viewTableBtn" onclick="switchView('table')" class="px-3 py-1 rounded-lg bg-white text-slate-800 shadow-xs transition-all">
+              <i class="fa-solid fa-table mr-1"></i>表格檢視
+            </button>
+            <button id="viewRawBtn" onclick="switchView('raw')" class="px-3 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition-all">
+              <i class="fa-solid fa-code mr-1"></i>原始資料 (前5筆)
+            </button>
+          </div>
+        </div>
+
+        <!-- 表格檢視 -->
+        <div id="tableSection" class="overflow-x-auto p-1">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead id="tableHead" class="bg-slate-100 text-slate-700 uppercase font-semibold"></thead>
+            <tbody id="tableBody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+
+        <!-- 原始資料代碼檢視 -->
+        <div id="rawSection" class="hidden p-4">
+          <pre id="rawCodeBlock" class="text-xs font-mono bg-slate-900 text-emerald-400 p-4 rounded-xl overflow-x-auto max-h-[500px] leading-relaxed"></pre>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="mt-auto border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-400">
+    純前端單頁應用程式 • 遵循安全標準 • 支援 JSON, CSV 與 XML 格式解析
+  </footer>
+
+  <!-- 簡易浮動提示 (Toast) -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="bg-slate-900 text-white text-xs px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2">
+      <span id="toastIcon"><i class="fa-solid fa-info-circle text-blue-400"></i></span>
+      <span id="toastText">訊息提示</span>
+    </div>
+  </div>
+
+  <script>
+    const samples = {
+      json: "https://jsonplaceholder.typicode.com/posts",
+      csv: "https://raw.githubusercontent.com/datasets/gdp/master/data/gdp.csv",
+      xml: "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"
+    };
+
+    let currentFiveRecords = [];
+    let currentFormat = '';
+    let currentRawString = '';
+
+    function showToast(text, iconClass = 'fa-solid fa-circle-info text-blue-400') {
+      const toast = document.getElementById('toast');
+      const toastText = document.getElementById('toastText');
+      const toastIcon = document.getElementById('toastIcon');
+      toastText.innerText = text;
+      toastIcon.innerHTML = `<i class="${iconClass}"></i>`;
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+        toast.classList.remove('translate-y-0', 'opacity-100');
+      }, 3000);
+    }
+
+    function loadSample(type) {
+      document.getElementById('apiUrl').value = samples[type] || '';
+      showToast(`已填入 ${type.toUpperCase()} 測試網址`);
+      fetchData();
+    }
+
+    function retryWithProxyToggle() {
+      const proxyCb = document.getElementById('useProxy');
+      proxyCb.checked = !proxyCb.checked;
+      showToast(`已${proxyCb.checked ? '開啟' : '關閉'}代理伺服器重試...`);
+      fetchData();
+    }
+
+    function resetForm() {
+      // 清空輸入欄位
+      document.getElementById('apiUrl').value = '';
+      
+      // 隱藏結果區塊、錯誤提示與載入動畫
+      document.getElementById('resultContainer').classList.add('hidden');
+      document.getElementById('errorBox').classList.add('hidden');
+      document.getElementById('loadingState').classList.add('hidden');
+
+      // 清空暫存資料
+      currentFiveRecords = [];
+      currentFormat = '';
+      currentRawString = '';
+
+      showToast('已重置輸入與查詢結果', 'fa-solid fa-rotate-left text-slate-400');
+    }
+
+    async function fetchData() {
+      const urlInput = document.getElementById('apiUrl').value.trim();
+      if (!urlInput) return;
+
+      const useProxy = document.getElementById('useProxy').checked;
+      const loadingState = document.getElementById('loadingState');
+      const errorBox = document.getElementById('errorBox');
+      const resultContainer = document.getElementById('resultContainer');
+      const submitBtn = document.getElementById('submitBtn');
+
+      // 重設狀態
+      errorBox.classList.add('hidden');
+      resultContainer.classList.add('hidden');
+      loadingState.classList.remove('hidden');
+      submitBtn.disabled = true;
+      submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
+
+      const startTime = performance.now();
+      let targetFetchUrl = urlInput;
+
+      if (useProxy) {
+        // 使用公開 CORS 中繼代理服務
+        targetFetchUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(urlInput)}`;
+      }
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超時
+
+        const response = await fetch(targetFetchUrl, {
+          method: 'GET',
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const duration = Math.round(performance.now() - startTime);
+
+        if (!response.ok) {
+          throw new Error(`伺服器回應錯誤狀態碼: ${response.status} (${response.statusText || 'Error'})`);
+        }
+
+        const rawText = await response.text();
+        const sizeKb = (new Blob([rawText]).size / 1024).toFixed(2);
+
+        // 偵測並嘗試解析 JSON / CSV / XML
+        const parseResult = detectAndParse(rawText);
+
+        if (!parseResult.success) {
+          throw new Error(`資料解析失敗：無法識別為有效之 JSON、CSV 或 XML 資料。(${parseResult.reason || '格式不支援'})`);
+        }
+
+        // 顯示結果
+        renderSuccess(parseResult, response.status, duration, sizeKb, rawText);
+
+      } catch (err) {
+        const duration = Math.round(performance.now() - startTime);
+        renderError(err, useProxy);
+      } finally {
+        loadingState.classList.add('hidden');
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+      }
+    }
+
+    function detectAndParse(text) {
+      const trimmed = text.trim();
+      if (!trimmed) {
+        return { success: false, reason: '回傳內容為空' };
+      }
+
+      // 1. 嘗試解析為 JSON
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          let records = [];
+
+          if (Array.isArray(parsed)) {
+            records = parsed;
+          } else if (typeof parsed === 'object' && parsed !== null) {
+            // 如果根為物件，尋找第一個陣列屬性 (如 data, items, results)
+            const arrayKey = Object.keys(parsed).find(k => Array.isArray(parsed[k]));
+            if (arrayKey && parsed[arrayKey].length > 0) {
+              records = parsed[arrayKey];
+            } else {
+              // 拆解頂層物件的鍵值對作為單筆或多筆
+              records = Object.entries(parsed).map(([key, val]) => ({
+                屬性名稱: key,
+                值: typeof val === 'object' ? JSON.stringify(val) : String(val)
+              }));
+            }
+          }
+
+          if (records.length > 0) {
+            return {
+              success: true,
+              type: 'JSON',
+              records: records.slice(0, 5),
+              totalCount: records.length
+            };
+          }
+        } catch (e) {
+          // 非 JSON，繼續嘗試 CSV / XML
+        }
+      }
+
+      // 2. 嘗試解析為 XML
+      if (trimmed.startsWith('<') && trimmed.endsWith('>')) {
+        try {
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(trimmed, 'text/xml');
+          const parseError = xmlDoc.getElementsByTagName('parsererror');
+
+          if (parseError.length === 0) {
+            const records = parseXmlToRecords(xmlDoc);
+            if (records.length > 0) {
+              return {
+                success: true,
+                type: 'XML',
+                records: records.slice(0, 5),
+                totalCount: records.length
+              };
+            }
+          }
+        } catch (e) {
+          // 繼續嘗試其他格式
+        }
+      }
+
+      // 3. 嘗試解析為 CSV
+      const csvResult = tryParseCsv(trimmed);
+      if (csvResult && csvResult.length > 0) {
+        return {
+          success: true,
+          type: 'CSV',
+          records: csvResult.slice(0, 5),
+          totalCount: csvResult.length
+        };
+      }
+
+      return { success: false, reason: '無法解析為標準 JSON、CSV 或 XML 格式' };
+    }
+
+    // 輔助函式：解析 XML 為扁平化字典集合
+    function parseXmlToRecords(xmlDoc) {
+      // 搜尋常見重複集合節點 (如 item, entry, row, record 或根節點的直接子元素)
+      const commonTags = ['item', 'entry', 'row', 'record', 'article', 'product', 'user', 'data'];
+      let targetElements = [];
+
+      for (const tag of commonTags) {
+        const found = xmlDoc.getElementsByTagName(tag);
+        if (found.length > 0) {
+          targetElements = Array.from(found);
+          break;
+        }
+      }
+
+      // 若未找到特定通用標籤，取根節點底下的所有子節點
+      if (targetElements.length === 0 && xmlDoc.documentElement) {
+        targetElements = Array.from(xmlDoc.documentElement.children);
+      }
+
+      if (targetElements.length === 0) return [];
+
+      return targetElements.map((el, index) => {
+        const row = { '#Index': index + 1 };
+        // 屬性轉換
+        for (let attr of el.attributes) {
+          row[`@${attr.name}`] = attr.value;
+        }
+        // 子節點文字轉換
+        for (let child of el.children) {
+          row[child.tagName] = child.textContent.trim().substring(0, 200);
+        }
+        if (Object.keys(row).length === 1) {
+          row['內容'] = el.textContent.trim();
+        }
+        return row;
+      });
+    }
+
+    // 輔助函式：解析 CSV
+    function tryParseCsv(text) {
+      const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+      if (lines.length < 2) return null;
+
+      // 偵測分隔符號 (, 或 \t 或 ;)
+      const sampleLine = lines[0];
+      let delimiter = ',';
+      if (sampleLine.split('\t').length > sampleLine.split(',').length) delimiter = '\t';
+      else if (sampleLine.split(';').length > sampleLine.split(',').length) delimiter = ';';
+
+      const parseCsvLine = (line) => {
+        const values = [];
+        let insideQuote = false;
+        let entry = '';
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            insideQuote = !insideQuote;
+          } else if (char === delimiter && !insideQuote) {
+            values.push(entry.trim().replace(/^"|"$/g, ''));
+            entry = '';
+          } else {
+            entry += char;
+          }
+        }
+        values.push(entry.trim().replace(/^"|"$/g, ''));
+        return values;
+      };
+
+      const headers = parseCsvLine(lines[0]);
+      if (headers.length < 1) return null;
+
+      const records = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseCsvLine(lines[i]);
+        if (cols.length === 0) continue;
+        const obj = {};
+        headers.forEach((h, idx) => {
+          obj[h || `欄位_${idx+1}`] = cols[idx] !== undefined ? cols[idx] : '';
+        });
+        records.push(obj);
+      }
+
+      return records.length > 0 ? records : null;
+    }
+
+    function renderSuccess(parseResult, status, duration, sizeKb, raw) {
+      currentFiveRecords = parseResult.records;
+      currentFormat = parseResult.type;
+      currentRawString = raw;
+
+      const resultContainer = document.getElementById('resultContainer');
+      const badge = document.getElementById('formatBadge');
+      const totalText = document.getElementById('totalRecordsText');
+      const httpStatus = document.getElementById('httpStatus');
+      const responseTime = document.getElementById('responseTime');
+      const responseSize = document.getElementById('responseSize');
+
+      // 樣式對應徽章
+      badge.textContent = parseResult.type;
+      badge.className = 'px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase ';
+      if (parseResult.type === 'JSON') {
+        badge.classList.add('bg-amber-100', 'text-amber-800');
+      } else if (parseResult.type === 'CSV') {
+        badge.classList.add('bg-emerald-100', 'text-emerald-800');
+      } else {
+        badge.classList.add('bg-sky-100', 'text-sky-800');
+      }
+
+      totalText.textContent = `來源總計約 ${parseResult.totalCount} 筆，已為您呈現前 ${parseResult.records.length} 筆資料`;
+      httpStatus.textContent = `${status} OK`;
+      responseTime.textContent = `${duration} ms`;
+      responseSize.textContent = `${sizeKb} KB`;
+
+      // 構建表格展示
+      renderTable(parseResult.records);
+
+      // 構建 Raw 展示 (只取前 5 筆字串化)
+      document.getElementById('rawCodeBlock').textContent = JSON.stringify(parseResult.records, null, 2);
+
+      resultContainer.classList.remove('hidden');
+      switchView('table');
+      showToast(`成功解析 ${parseResult.type} 資料！`, 'fa-solid fa-circle-check text-emerald-400');
+    }
+
+    function renderTable(records) {
+      const tableHead = document.getElementById('tableHead');
+      const tableBody = document.getElementById('tableBody');
+      tableHead.innerHTML = '';
+      tableBody.innerHTML = '';
+
+      if (!records || records.length === 0) {
+        tableBody.innerHTML = `<tr><td class="p-4 text-center text-slate-400">無任何資料可供顯示</td></tr>`;
+        return;
+      }
+
+      // 收集全部記錄中的鍵值
+      const keys = new Set();
+      records.forEach(r => {
+        if (typeof r === 'object' && r !== null) {
+          Object.keys(r).forEach(k => keys.add(k));
+        } else {
+          keys.add('Value');
+        }
+      });
+
+      const columns = Array.from(keys);
+
+      // 表頭
+      const trHead = document.createElement('tr');
+      const thIndex = document.createElement('th');
+      thIndex.className = 'px-4 py-3 text-slate-500 font-semibold w-14';
+      thIndex.textContent = '#';
+      trHead.appendChild(thIndex);
+
+      columns.forEach(col => {
+        const th = document.createElement('th');
+        th.className = 'px-4 py-3 whitespace-nowrap text-slate-700';
+        th.textContent = col;
+        trHead.appendChild(th);
+      });
+      tableHead.appendChild(trHead);
+
+      // 表身 (前 5 筆)
+      records.forEach((row, i) => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50/80 transition-colors';
+
+        const tdIdx = document.createElement('td');
+        tdIdx.className = 'px-4 py-3 font-semibold text-slate-400 text-center';
+        tdIdx.textContent = i + 1;
+        tr.appendChild(tdIdx);
+
+        columns.forEach(col => {
+          const td = document.createElement('td');
+          td.className = 'px-4 py-3 text-slate-600 max-w-xs truncate';
+          let val = '';
+          if (typeof row === 'object' && row !== null) {
+            val = row[col];
+          } else if (col === 'Value') {
+            val = row;
+          }
+
+          if (typeof val === 'object') {
+            td.textContent = JSON.stringify(val);
+          } else {
+            td.textContent = val !== undefined && val !== null ? String(val) : '-';
+          }
+          td.title = td.textContent; // 滑鼠移上去看完整內容
+          tr.appendChild(td);
+        });
+
+        tableBody.appendChild(tr);
+      });
+    }
+
+    function renderError(err, proxyUsed) {
+      const errorBox = document.getElementById('errorBox');
+      const errorMessage = document.getElementById('errorMessage');
+      const errorDetails = document.getElementById('errorDetails');
+
+      let userFriendlyMsg = '無法取得該網址的資料。可能是伺服器不存在、拒絕連線，或是受到瀏覽器同源政策 (CORS) 阻擋。';
+
+      if (!proxyUsed) {
+        userFriendlyMsg += ' 建議勾選「啟用 CORS 跨域代理」後再次嘗試。';
+      } else {
+        userFriendlyMsg += ' 若已開啟代理依然無法取得，請確認目標網址是否正確且公開可存取。';
+      }
+
+      errorMessage.textContent = userFriendlyMsg;
+      errorDetails.textContent = `錯誤原因: ${err.message || err}`;
+      errorDetails.classList.remove('hidden');
+      errorBox.classList.remove('hidden');
+
+      showToast('無法取得資料，請檢查網址或代理設定', 'fa-solid fa-circle-xmark text-red-400');
+    }
+
+    function switchView(mode) {
+      const tableSection = document.getElementById('tableSection');
+      const rawSection = document.getElementById('rawSection');
+      const viewTableBtn = document.getElementById('viewTableBtn');
+      const viewRawBtn = document.getElementById('viewRawBtn');
+
+      if (mode === 'table') {
+        tableSection.classList.remove('hidden');
+        rawSection.classList.add('hidden');
+        viewTableBtn.className = 'px-3 py-1 rounded-lg bg-white text-slate-800 shadow-xs transition-all font-medium';
+        viewRawBtn.className = 'px-3 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition-all font-medium';
+      } else {
+        tableSection.classList.add('hidden');
+        rawSection.classList.remove('hidden');
+        viewRawBtn.className = 'px-3 py-1 rounded-lg bg-white text-slate-800 shadow-xs transition-all font-medium';
+        viewTableBtn.className = 'px-3 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition-all font-medium';
+      }
+    }
+  </script>
+</body>
+</html>
